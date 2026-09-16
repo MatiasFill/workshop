@@ -1,0 +1,44 @@
+namespace:
+  name: oficina-ai
+
+image:
+  backend:
+    repository: your-registry/oficina-ai-backend
+    tag: latest
+    pullPolicy: Always
+  frontend:
+    repository: your-registry/oficina-ai-frontend
+    tag: latest
+    pullPolicy: Always
+
+postgres:
+  enabled: true
+  serviceName: postgres
+  username: oficina
+  password: oficina
+  database: oficina
+  storage: 5Gi
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+
+backend:
+  replicaCount: 2
+  serviceType: LoadBalancer
+  port: 8000
+  env:
+    appEnv: development
+    appName: Oficina AI
+    corsOrigins: http://localhost:5173
+
+frontend:
+  replicaCount: 2
+  serviceType: LoadBalancer
+  port: 5173
+  apiUrl: http://backend:8000/api
+
+ingress:
+  enabled: true
+  className: nginx
+  host: oficina.local

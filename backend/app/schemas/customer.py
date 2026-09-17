@@ -2,9 +2,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-
-def _only_digits(value: str) -> str:
-    return "".join(ch for ch in value if ch.isdigit())
+from app.core.validators import (
+    validate_document,
+    validate_email,
+    validate_phone,
+    validate_plate,
+)
 
 
 class VehicleCreate(BaseModel):
@@ -19,7 +22,7 @@ class VehicleCreate(BaseModel):
     @field_validator("plate")
     @classmethod
     def normalize_plate(cls, v: str) -> str:
-        return v.strip().upper().replace("-", "").replace(" ", "")
+        return validate_plate(v, None)
 
 
 class VehicleUpdate(BaseModel):
@@ -37,7 +40,7 @@ class VehicleUpdate(BaseModel):
     def normalize_plate(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        return v.strip().upper().replace("-", "").replace(" ", "")
+        return validate_plate(v, None)
 
 
 class VehicleResponse(BaseModel):
@@ -69,7 +72,17 @@ class CustomerCreate(BaseModel):
     @field_validator("document")
     @classmethod
     def normalize_document(cls, v: str) -> str:
-        return _only_digits(v)
+        return validate_document(v, None)
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone(cls, v: str) -> str:
+        return validate_phone(v, None)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return validate_email(v, None)
 
 
 class CustomerUpdate(BaseModel):
@@ -86,7 +99,21 @@ class CustomerUpdate(BaseModel):
     def normalize_document(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        return _only_digits(v)
+        return validate_document(v, None)
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return validate_phone(v, None)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return validate_email(v, None)
 
 
 class CustomerResponse(BaseModel):

@@ -9,6 +9,7 @@ aqui são pensados para ser chamados por um cron/worker externo, ou
 manualmente via os endpoints em app/api/retention_routes.py.
 """
 from datetime import date, datetime, timedelta
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -28,7 +29,7 @@ def purge_old_notification_logs(db: Session, company_id: int, days: int | None =
     guarda contábil ou fiscal, e carregam `customer_id`: quanto antes
     minimizados, melhor."""
     window = days if days is not None else settings.RETENTION_NOTIFICATION_LOGS_DAYS
-    cutoff = datetime.utcnow() - timedelta(days=window)
+    cutoff = utcnow_naive() - timedelta(days=window)
     deleted = (
         db.query(NotificationLog)
         .filter(NotificationLog.company_id == company_id, NotificationLog.created_at < cutoff)

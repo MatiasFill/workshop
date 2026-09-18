@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
+import { DragEvent, useEffect, useState } from 'react'
 import { Activity, AlertTriangle, BarChart3, Bell, BellRing, Bot, Car, ChevronRight, ClipboardList, DollarSign, FileText, Gauge, Lock, LogOut, Package, Plus, RefreshCw, Search, Settings, ShieldCheck, ShoppingCart, Sparkles, TrendingDown, TrendingUp, Trash2, Truck, Unlock, UploadCloud, Users, Wallet, Wrench, X } from 'lucide-react'
 import {
-  addCashMovement, adjustStockItem, anonymizeCustomer, anonymizeInactiveCustomers, Appointment, askAI, AuditLog,
+  addCashMovement, addChecklistItem, adjustStockItem, anonymizeCustomer, anonymizeInactiveCustomers, Appointment, AppointmentStatus, askAI, AuditLog,
   cancelAppointment, cancelFinanceEntry, cancelPurchaseOrder, cancelWorkOrder, CashMovement, CashSession,
-  closeCashSession, closeWorkOrder, createAppointment, createCustomer, createFinanceEntry, createPurchaseOrder,
+  ChecklistItemStatus, closeCashSession, closeWorkOrder, createAppointment, createCustomer, createFinanceEntry, createPurchaseOrder,
   createStockItem, createSupplier, createWorkOrder, Customer, CustomerListItem, DashboardReport, exportCustomerData,
   FinanceEntry, getCurrentCashSession, getCustomer, getDashboardReport, ingestFile, listAppointments, listAuditLogs,
   listCashMovements, listCustomers, listFinanceEntries, listNotificationQueue, listPurchaseOrders,
   listRetentionCandidates, listStock, listSuppliers, listWorkOrders, login, logout, me,
   NotificationQueueEntry, openCashSession, payFinanceEntry, processNotificationQueue, purgeOldNotifications,
-  PurchaseOrder, receivePurchaseOrder, RetentionCandidate, StockItem, Supplier, WorkOrder,
+  PurchaseOrder, receivePurchaseOrder, removeChecklistItem, RetentionCandidate, StockItem, Supplier, updateChecklistItem, updateAppointmentStatus, updateWorkOrderStatus, WorkOrder, WorkOrderStatus,
 } from './lib/api'
 
 type Page = 'dashboard' | 'customers' | 'agenda' | 'stock' | 'workorders' | 'reports' | 'finance' | 'purchases' | 'audit' | 'retention' | 'notifqueue'
@@ -400,21 +400,49 @@ function NewAppointmentModal({ onClose, onCreated }: { onClose: () => void; onCr
   )
 }
 
-const statusLabel: Record<Appointment['status'], string> = {
-  SCHEDULED: 'Agendado', CONFIRMED: 'Confirmado', IN_PROGRESS: 'Em andamento',
-  DONE: 'Concluído', CANCELLED: 'Cancelado', NO_SHOW: 'Não compareceu',
-}
-const statusColor: Record<Appointment['status'], string> = {
-  SCHEDULED: 'bg-blue-50 text-blue-600', CONFIRMED: 'bg-emerald-50 text-emerald-600',
-  IN_PROGRESS: 'bg-amber-50 text-amber-600', DONE: 'bg-slate-100 text-slate-500',
-  CANCELLED: 'bg-red-50 text-red-500', NO_SHOW: 'bg-red-50 text-red-500',
+const appointmentColumns: { status: AppointmentStatus; label: string; accent: string }[] = [
+  { status: 'SCHEDULED', label: 'Agendado', accent: 'border-t-blue-300' },
+  { status: 'CONFIRMED', label: 'Confirmado', accent: 'border-t-emerald-300' },
+  { status: 'IN_PROGRESS', label: 'Em andamento', accent: 'border-t-amber-300' },
+  { status: 'DONE', label: 'Concluído', accent: 'border-t-slate-300' },
+  { status: 'CANCELLED', label: 'Cancelado', accent: 'border-t-red-300' },
+  { status: 'NO_SHOW', label: 'Não compareceu', accent: 'border-t-red-200' },
+]
+
+function AppointmentCard({ a, onDragStart, onDragEnd, dragging }: {
+  a: Appointment
+  onDragStart: (e: DragEvent) => void
+  onDragEnd: () => void
+  dragging: boolean
+}) {
+  const draggable = a.status !== 'DONE' && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW'
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragEnd={onDragEnd}
+      className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition ${
+        draggable ? 'cursor-grab active:cursor-grabbing hover:shadow-md' : 'opacity-80'
+      } ${dragging ? 'opacity-40' : ''}`}
+    >
+      <div className="text-xs font-bold text-slate-400">
+        {new Date(a.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+      </div>
+      <div className="mt-1 truncate text-sm font-bold text-slate-800">{a.customer_name}</div>
+      {a.vehicle_plate && <div className="text-xs text-slate-400">{a.vehicle_plate}</div>}
+      {a.service_type && <div className="mt-2 text-xs font-semibold text-slate-500">{a.service_type}</div>}
+    </div>
+  )
 }
 
 function AgendaPage() {
   const [items, setItems] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [showNew, setShowNew] = useState(false)
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [dragOverStatus, setDragOverStatus] = useState<AppointmentStatus | null>(null)
 
   function reload() {
     setLoading(true); setError('')
@@ -426,19 +454,30 @@ function AgendaPage() {
 
   useEffect(() => { reload() }, [])
 
-  async function handleCancel(id: number) {
+  async function handleDrop(id: number, targetStatus: AppointmentStatus) {
+    setDragOverStatus(null)
+    const appt = items.find(a => a.id === id)
+    if (!appt || appt.status === targetStatus) return
+    setActionError('')
     try {
-      await cancelAppointment(id)
-      reload()
-    } catch { /* silencioso: item permanece como está na lista */ }
+      const updated = targetStatus === 'CANCELLED' ? await cancelAppointment(id) : await updateAppointmentStatus(id, targetStatus)
+      setItems(prev => prev.map(a => a.id === updated.id ? updated : a))
+    } catch {
+      setActionError(
+        targetStatus === 'CANCELLED'
+          ? 'Não foi possível cancelar este agendamento.'
+          : 'Não foi possível mover este agendamento — confira se não há conflito de horário.'
+      )
+    }
   }
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6 p-5 md:p-8">
+    <section className="mx-auto max-w-[1600px] space-y-6 p-5 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">Operação</div>
           <h1 className="text-xl font-black">Agenda</h1>
+          <p className="mt-1 text-xs text-slate-400">Arraste um card para mudar o status.</p>
         </div>
         <button onClick={()=>setShowNew(true)}
           className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">
@@ -446,48 +485,48 @@ function AgendaPage() {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
-        {loading && <div className="p-6 text-sm text-slate-400">Carregando...</div>}
-        {error && <div className="p-6 text-sm text-red-600">{error}</div>}
-        {!loading && !error && items.length === 0 && (
-          <div className="p-6 text-sm text-slate-400">Nenhum agendamento encontrado.</div>
-        )}
-        {!loading && !error && items.length > 0 && (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="px-5 py-3">Quando</th><th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3">Veículo</th><th className="px-5 py-3">Serviço</th>
-                <th className="px-5 py-3">Status</th><th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(a => (
-                <tr key={a.id} className="border-t border-slate-100">
-                  <td className="px-5 py-3 font-semibold">
-                    {new Date(a.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </td>
-                  <td className="px-5 py-3 text-slate-500">{a.customer_name}</td>
-                  <td className="px-5 py-3 text-slate-500">{a.vehicle_plate || '—'}</td>
-                  <td className="px-5 py-3 text-slate-500">{a.service_type || '—'}</td>
-                  <td className="px-5 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusColor[a.status]}`}>
-                      {statusLabel[a.status]}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    {(a.status === 'SCHEDULED' || a.status === 'CONFIRMED') && (
-                      <button onClick={() => handleCancel(a.id)} className="text-xs font-bold text-red-500 hover:underline">
-                        Cancelar
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {actionError && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{actionError}</div>}
+      {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+      {loading && <div className="text-sm text-slate-400">Carregando...</div>}
+
+      {!loading && !error && (
+        <div className="grid grid-cols-3 gap-3 pb-4">
+          {appointmentColumns.map(col => {
+            const colItems = items.filter(a => a.status === col.status)
+            const isOver = dragOverStatus === col.status
+            return (
+              <div
+                key={col.status}
+                onDragOver={e => { e.preventDefault(); if (dragOverStatus !== col.status) setDragOverStatus(col.status) }}
+                onDragLeave={() => setDragOverStatus(prev => prev === col.status ? null : prev)}
+                onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData('text/plain')); handleDrop(id, col.status) }}
+                className={`flex min-h-[220px] min-w-0 flex-col rounded-2xl border-t-4 bg-slate-50/60 p-3 transition ${col.accent} ${
+                  isOver ? 'ring-2 ring-slate-300' : ''
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{col.label}</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-400 shadow-sm">{colItems.length}</span>
+                </div>
+                <div className="flex min-h-[80px] flex-col gap-2">
+                  {colItems.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-300">vazio</div>
+                  )}
+                  {colItems.map(a => (
+                    <AppointmentCard
+                      key={a.id}
+                      a={a}
+                      dragging={draggingId === a.id}
+                      onDragStart={e => { e.dataTransfer.setData('text/plain', String(a.id)); setDraggingId(a.id) }}
+                      onDragEnd={()=>setDraggingId(null)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {showNew && (
         <NewAppointmentModal onClose={()=>setShowNew(false)} onCreated={reload} />
@@ -730,16 +769,6 @@ function StockPage() {
   )
 }
 
-const workOrderStatusLabel: Record<string, string> = {
-  OPEN: 'Aberta', IN_PROGRESS: 'Em andamento', AWAITING_APPROVAL: 'Aguardando aprovação',
-  APPROVED: 'Aprovada', DONE: 'Concluída', CANCELLED: 'Cancelada',
-}
-const workOrderStatusColor: Record<string, string> = {
-  OPEN: 'bg-slate-100 text-slate-600', IN_PROGRESS: 'bg-blue-50 text-blue-600',
-  AWAITING_APPROVAL: 'bg-amber-50 text-amber-600', APPROVED: 'bg-indigo-50 text-indigo-600',
-  DONE: 'bg-emerald-50 text-emerald-600', CANCELLED: 'bg-red-50 text-red-500',
-}
-
 type NewWorkOrderItemDraft = { kind: 'PART' | 'SERVICE'; description: string; stock_item_id?: number; quantity: number; unit_price: number }
 
 function NewWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -883,13 +912,196 @@ function NewWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onCrea
   )
 }
 
+const checklistStatusLabel: Record<string, string> = {
+  NOT_CHECKED: 'Não verificado', OK: 'OK', ATTENTION: 'Atenção',
+}
+const checklistStatusColor: Record<string, string> = {
+  NOT_CHECKED: 'bg-slate-100 text-slate-500', OK: 'bg-emerald-50 text-emerald-600', ATTENTION: 'bg-amber-50 text-amber-600',
+}
+
+function WorkOrderChecklistModal({ workOrder, onClose, onChanged }: {
+  workOrder: WorkOrder; onClose: () => void; onChanged: (wo: WorkOrder) => void
+}) {
+  const [newDescription, setNewDescription] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const editable = workOrder.status !== 'DONE' && workOrder.status !== 'CANCELLED'
+
+  async function handleAdd() {
+    if (!newDescription.trim()) return
+    setBusy(true); setError('')
+    try {
+      const updated = await addChecklistItem(workOrder.id, newDescription.trim())
+      onChanged(updated)
+      setNewDescription('')
+    } catch {
+      setError('Não foi possível adicionar o item.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleStatus(itemId: number, status: ChecklistItemStatus) {
+    setBusy(true); setError('')
+    try {
+      const updated = await updateChecklistItem(workOrder.id, itemId, { status })
+      onChanged(updated)
+    } catch {
+      setError('Não foi possível atualizar o item.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleNotes(itemId: number, notes: string) {
+    try {
+      const updated = await updateChecklistItem(workOrder.id, itemId, { notes })
+      onChanged(updated)
+    } catch {
+      setError('Não foi possível salvar a observação.')
+    }
+  }
+
+  async function handleRemove(itemId: number) {
+    setBusy(true); setError('')
+    try {
+      const updated = await removeChecklistItem(workOrder.id, itemId)
+      onChanged(updated)
+    } catch {
+      setError('Não foi possível remover o item.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">OS #{workOrder.id}</div>
+            <h2 className="text-lg font-black">Checklist de inspeção</h2>
+          </div>
+          <button onClick={onClose} className="text-sm font-bold text-slate-400 hover:text-slate-700">Fechar</button>
+        </div>
+
+        {error && <div className="mb-3 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</div>}
+
+        <div className="space-y-3">
+          {workOrder.checklist_items.length === 0 && (
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-400">Nenhum item de checklist ainda.</div>
+          )}
+          {workOrder.checklist_items.map(item => (
+            <div key={item.id} className="rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm font-semibold">{item.description}</div>
+                {editable && (
+                  <button disabled={busy} onClick={()=>handleRemove(item.id)} className="text-xs font-bold text-red-500 hover:underline disabled:opacity-50">
+                    Remover
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(['NOT_CHECKED', 'OK', 'ATTENTION'] as ChecklistItemStatus[]).map(s => (
+                  <button
+                    key={s}
+                    disabled={!editable || busy}
+                    onClick={()=>handleStatus(item.id, s)}
+                    className={`rounded-full px-3 py-1 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-60 ${
+                      item.status === s ? checklistStatusColor[s] : 'bg-white text-slate-400 ring-1 ring-slate-200'
+                    }`}
+                  >
+                    {checklistStatusLabel[s]}
+                  </button>
+                ))}
+              </div>
+              <input
+                defaultValue={item.notes}
+                disabled={!editable}
+                placeholder="Observação (opcional)"
+                onBlur={e => { if (e.target.value !== item.notes) handleNotes(item.id, e.target.value) }}
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
+              />
+            </div>
+          ))}
+        </div>
+
+        {editable && (
+          <div className="mt-4 flex gap-2">
+            <input
+              value={newDescription}
+              onChange={e => setNewDescription(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+              placeholder="Ex.: Freios, pneus, nível de óleo..."
+              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+            <button disabled={busy || !newDescription.trim()} onClick={handleAdd}
+              className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+              Adicionar
+            </button>
+          </div>
+        )}
+        {!editable && (
+          <div className="mt-4 text-xs text-slate-400">Ordem de serviço encerrada — checklist somente leitura.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const workOrderColumns: { status: WorkOrderStatus; label: string; accent: string }[] = [
+  { status: 'OPEN', label: 'Aberta', accent: 'border-t-slate-300' },
+  { status: 'IN_PROGRESS', label: 'Em andamento', accent: 'border-t-blue-300' },
+  { status: 'AWAITING_APPROVAL', label: 'Aguardando aprovação', accent: 'border-t-amber-300' },
+  { status: 'APPROVED', label: 'Aprovada', accent: 'border-t-indigo-300' },
+  { status: 'DONE', label: 'Concluída', accent: 'border-t-emerald-300' },
+  { status: 'CANCELLED', label: 'Cancelada', accent: 'border-t-red-300' },
+]
+
+function WorkOrderCard({ wo, onDragStart, onDragEnd, onOpenChecklist, dragging }: {
+  wo: WorkOrder
+  onDragStart: (e: DragEvent) => void
+  onDragEnd: () => void
+  onOpenChecklist: () => void
+  dragging: boolean
+}) {
+  const draggable = wo.status !== 'DONE' && wo.status !== 'CANCELLED'
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragEnd={onDragEnd}
+      className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition ${
+        draggable ? 'cursor-grab active:cursor-grabbing hover:shadow-md' : 'opacity-80'
+      } ${dragging ? 'opacity-40' : ''}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-mono text-xs text-slate-400">#{wo.id}</span>
+        {wo.next_revision_date && (
+          <span className="text-[10px] font-semibold text-slate-400">rev. {wo.next_revision_date}</span>
+        )}
+      </div>
+      <div className="mt-1 truncate text-sm font-bold text-slate-800">{wo.customer_name || '—'}</div>
+      {wo.vehicle_plate && <div className="text-xs text-slate-400">{wo.vehicle_plate}</div>}
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-600">R$ {wo.total_value.toFixed(2)}</span>
+        <button onClick={onOpenChecklist} className="text-xs font-bold text-slate-400 hover:text-slate-700 hover:underline">
+          Checklist{wo.checklist_items.length > 0 ? ` (${wo.checklist_items.length})` : ''}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function WorkOrdersPage() {
   const [items, setItems] = useState<WorkOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [showNew, setShowNew] = useState(false)
-  const [busyId, setBusyId] = useState<number | null>(null)
+  const [checklistWo, setChecklistWo] = useState<WorkOrder | null>(null)
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [dragOverStatus, setDragOverStatus] = useState<WorkOrderStatus | null>(null)
 
   function reload() {
     setLoading(true); setError('')
@@ -898,36 +1110,35 @@ function WorkOrdersPage() {
 
   useEffect(() => { reload() }, [])
 
-  async function handleClose(id: number) {
-    setBusyId(id); setActionError('')
+  async function handleDrop(id: number, targetStatus: WorkOrderStatus) {
+    setDragOverStatus(null)
+    const wo = items.find(w => w.id === id)
+    if (!wo || wo.status === targetStatus) return
+    setActionError('')
     try {
-      await closeWorkOrder(id)
-      reload()
+      let updated: WorkOrder
+      if (targetStatus === 'DONE') updated = await closeWorkOrder(id)
+      else if (targetStatus === 'CANCELLED') updated = await cancelWorkOrder(id)
+      else updated = await updateWorkOrderStatus(id, targetStatus)
+      setItems(prev => prev.map(w => w.id === updated.id ? updated : w))
     } catch {
-      setActionError('Não foi possível concluir — confira se há estoque suficiente para as peças usadas.')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  async function handleCancel(id: number) {
-    setBusyId(id); setActionError('')
-    try {
-      await cancelWorkOrder(id)
-      reload()
-    } catch {
-      setActionError('Não foi possível cancelar esta ordem de serviço.')
-    } finally {
-      setBusyId(null)
+      setActionError(
+        targetStatus === 'DONE'
+          ? 'Não foi possível concluir — confira se há estoque suficiente para as peças usadas.'
+          : targetStatus === 'CANCELLED'
+          ? 'Não foi possível cancelar esta ordem de serviço.'
+          : 'Não foi possível mover esta ordem de serviço.'
+      )
     }
   }
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6 p-5 md:p-8">
+    <section className="mx-auto max-w-[1600px] space-y-6 p-5 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">Operação</div>
           <h1 className="text-xl font-black">Ordens de serviço</h1>
+          <p className="mt-1 text-xs text-slate-400">Arraste um card para mudar o status.</p>
         </div>
         <button onClick={()=>setShowNew(true)}
           className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">
@@ -936,52 +1147,60 @@ function WorkOrdersPage() {
       </div>
 
       {actionError && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{actionError}</div>}
+      {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+      {loading && <div className="text-sm text-slate-400">Carregando...</div>}
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
-        {loading && <div className="p-6 text-sm text-slate-400">Carregando...</div>}
-        {error && <div className="p-6 text-sm text-red-600">{error}</div>}
-        {!loading && !error && items.length === 0 && (
-          <div className="p-6 text-sm text-slate-400">Nenhuma ordem de serviço ainda.</div>
-        )}
-        {!loading && !error && items.length > 0 && (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="px-5 py-3">#</th><th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3">Status</th><th className="px-5 py-3">Total</th>
-                <th className="px-5 py-3">Próx. revisão</th><th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(wo => (
-                <tr key={wo.id} className="border-t border-slate-100">
-                  <td className="px-5 py-3 font-mono text-xs text-slate-500">#{wo.id}</td>
-                  <td className="px-5 py-3 font-semibold">{wo.customer_name || '—'}</td>
-                  <td className="px-5 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${workOrderStatusColor[wo.status]}`}>{workOrderStatusLabel[wo.status]}</span>
-                  </td>
-                  <td className="px-5 py-3 text-slate-500">R$ {wo.total_value.toFixed(2)}</td>
-                  <td className="px-5 py-3 text-slate-500">{wo.next_revision_date ?? '—'}</td>
-                  <td className="px-5 py-3 text-right">
-                    {wo.status !== 'DONE' && wo.status !== 'CANCELLED' && (
-                      <div className="flex justify-end gap-3">
-                        <button disabled={busyId===wo.id} onClick={()=>handleClose(wo.id)} className="text-xs font-bold text-emerald-600 hover:underline disabled:opacity-50">
-                          Concluir
-                        </button>
-                        <button disabled={busyId===wo.id} onClick={()=>handleCancel(wo.id)} className="text-xs font-bold text-red-500 hover:underline disabled:opacity-50">
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {!loading && !error && (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {workOrderColumns.map(col => {
+            const colItems = items.filter(w => w.status === col.status)
+            const isOver = dragOverStatus === col.status
+            return (
+              <div
+                key={col.status}
+                onDragOver={e => { e.preventDefault(); if (dragOverStatus !== col.status) setDragOverStatus(col.status) }}
+                onDragLeave={() => setDragOverStatus(prev => prev === col.status ? null : prev)}
+                onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData('text/plain')); handleDrop(id, col.status) }}
+                className={`flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-50/60 p-3 transition ${col.accent} ${
+                  isOver ? 'ring-2 ring-slate-300' : ''
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{col.label}</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-400 shadow-sm">{colItems.length}</span>
+                </div>
+                <div className="flex min-h-[80px] flex-col gap-2">
+                  {colItems.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-300">vazio</div>
+                  )}
+                  {colItems.map(wo => (
+                    <WorkOrderCard
+                      key={wo.id}
+                      wo={wo}
+                      dragging={draggingId === wo.id}
+                      onDragStart={e => { e.dataTransfer.setData('text/plain', String(wo.id)); setDraggingId(wo.id) }}
+                      onDragEnd={()=>setDraggingId(null)}
+                      onOpenChecklist={()=>setChecklistWo(wo)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {showNew && <NewWorkOrderModal onClose={()=>setShowNew(false)} onCreated={reload} />}
+      {checklistWo && (
+        <WorkOrderChecklistModal
+          workOrder={checklistWo}
+          onClose={()=>setChecklistWo(null)}
+          onChanged={updated => {
+            setChecklistWo(updated)
+            setItems(prev => prev.map(w => w.id === updated.id ? updated : w))
+          }}
+        />
+      )}
     </section>
   )
 }
@@ -1977,6 +2196,11 @@ function App() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [page, setPage] = useState<Page>('dashboard')
   const [homeStats, setHomeStats] = useState<DashboardReport | null>(null)
+  const [copilotOpen, setCopilotOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<CustomerListItem[]>([])
+  const [searchBusy, setSearchBusy] = useState(false)
 
   useEffect(() => {
     me().then(setCurrentUser).catch(() => setCurrentUser(null)).finally(() => setAuthChecked(true))
@@ -2001,6 +2225,21 @@ function App() {
     setBusy(true)
     try { setAnswer(await askAI(question)) } catch (e:any) { setAnswer({answer:e.message, source:'error'}) }
     finally { setBusy(false) }
+  }
+
+  async function handleGlobalSearch(e: React.FormEvent) {
+    e.preventDefault()
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchResults([])
+      return
+    }
+    setSearchBusy(true)
+    try {
+      setSearchResults(await listCustomers(query))
+    } finally {
+      setSearchBusy(false)
+    }
   }
 
   async function handleFile(file?: File) {
@@ -2037,7 +2276,10 @@ function App() {
         <header className="sticky top-0 z-10 flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-8">
           <div><div className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">{pageEyebrow[page]}</div><h1 className="text-xl font-black">{pageTitle[page]}</h1></div>
           <div className="flex items-center gap-3">
-            <button className="rounded-xl border border-slate-200 bg-white p-2.5"><Search size={18}/></button>
+            <button onClick={() => setSearchOpen(true)} title="Buscar clientes" className="rounded-xl border border-slate-200 bg-white p-2.5 hover:bg-slate-50"><Search size={18}/></button>
+            <button onClick={() => setCopilotOpen(true)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <Sparkles size={16}/> <span>Consultar IA</span>
+            </button>
             <span className="hidden text-sm text-slate-500 md:inline">{currentUser?.name}</span>
             <button onClick={handleLogout} title="Sair" className="rounded-xl border border-slate-200 bg-white p-2.5"><LogOut size={18}/></button>
           </div>
@@ -2051,38 +2293,79 @@ function App() {
         <section className="mx-auto max-w-7xl space-y-6 p-5 md:p-8">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ['OS abertas', homeStats ? String(homeStats.open_work_orders) : '—', 'não concluídas nem canceladas'],
-              ['Valor em estoque', homeStats ? `R$ ${homeStats.stock_value.toFixed(2)}` : '—', homeStats ? `${homeStats.stock_critical_items} itens críticos` : 'sem dados'],
-              ['Lucro do mês', homeStats ? `R$ ${homeStats.profit_this_month.toFixed(2)}` : '—', homeStats ? `mês anterior: R$ ${homeStats.profit_last_month.toFixed(2)}` : 'sem dados'],
-              ['Clientes', homeStats ? String(homeStats.customers_total) : '—', homeStats ? `+${homeStats.customers_new_this_month} este mês` : 'sem dados'],
-            ].map(([a,b,c]) => <div key={a} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft"><div className="text-sm text-slate-500">{a}</div><div className="mt-2 text-3xl font-black">{b}</div><div className="mt-2 text-xs font-semibold text-slate-400">{c}</div></div>)}
+              ['OS abertas', homeStats ? String(homeStats.open_work_orders) : '—', 'não concluídas nem canceladas', 'border-t-blue-300'],
+              ['Valor em estoque', homeStats ? `R$ ${homeStats.stock_value.toFixed(2)}` : '—', homeStats ? `${homeStats.stock_critical_items} itens críticos` : 'sem dados', 'border-t-amber-300'],
+              ['Lucro do mês', homeStats ? `R$ ${homeStats.profit_this_month.toFixed(2)}` : '—', homeStats ? `mês anterior: R$ ${homeStats.profit_last_month.toFixed(2)}` : 'sem dados', 'border-t-emerald-300'],
+              ['Clientes', homeStats ? String(homeStats.customers_total) : '—', homeStats ? `+${homeStats.customers_new_this_month} este mês` : 'sem dados', 'border-t-slate-300'],
+            ].map(([a,b,c,accent]) => <div key={a} className={`rounded-2xl border-t-4 border-x border-b border-slate-200 bg-slate-50/60 p-5 shadow-sm ${accent}`}><div className="text-sm text-slate-500">{a}</div><div className="mt-2 text-3xl font-black">{b}</div><div className="mt-2 text-xs font-semibold text-slate-400">{c}</div></div>)}
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-            <div className="rounded-3xl bg-slate-950 p-6 text-white shadow-soft md:p-8">
-              <div className="mb-8 flex items-start justify-between"><div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-slate-400"><Sparkles size={14}/> Oficina Copilot</div><h2 className="max-w-xl text-2xl font-black md:text-3xl">Pergunte sobre clientes, veículos, OS e documentos.</h2></div><Bot size={25} className="text-slate-400"/></div>
-              <div className="rounded-2xl bg-white/10 p-2 ring-1 ring-white/10"><textarea value={question} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}}} placeholder="Ex.: quais serviços aparecem no manual enviado?" className="min-h-28 w-full resize-none bg-transparent p-3 text-sm outline-none placeholder:text-slate-500"/><div className="flex justify-end"><button onClick={ask} disabled={busy} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">{busy?'Consultando...':'Consultar IA'}</button></div></div>
-              {answer && <div className="mt-4 rounded-2xl bg-white p-5 text-sm text-slate-800"><div className="mb-2 flex gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><Activity size={14}/> {answer.source} · {answer.provider || 'local'} · {answer.chunks_used ?? 0} chunks</div><p className="whitespace-pre-wrap">{answer.answer}</p></div>}
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+            <div className="rounded-3xl border-t-4 border-x border-b border-blue-300 bg-white p-6 shadow-sm md:p-8">
               <div className="flex items-center justify-between"><div><h2 className="font-black">OCR + RAG</h2><p className="mt-1 text-sm text-slate-500">Envie PDF ou imagem para indexar.</p></div><UploadCloud size={21}/></div>
               <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center hover:bg-slate-100">
                 <UploadCloud className="mb-3 text-slate-400"/><span className="text-sm font-bold">Selecionar documento</span><span className="mt-1 text-xs text-slate-400">PDF, PNG, JPG ou TXT</span>
                 <input type="file" className="hidden" onChange={e=>handleFile(e.target.files?.[0])}/>
               </label>
               {upload && <div className="mt-4 rounded-xl bg-slate-100 p-3 text-xs text-slate-600">{upload}</div>}
-              <div className="mt-6 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-slate-50 p-3"><b className="block text-base">01</b>Upload</div><div className="rounded-xl bg-slate-50 p-3"><b className="block text-base">02</b>OCR</div><div className="rounded-xl bg-slate-50 p-3"><b className="block text-base">03</b>RAG</div></div>
+              <div className="mt-6 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><b className="block text-base">01</b>Upload</div><div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><b className="block text-base">02</b>OCR</div><div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><b className="block text-base">03</b>RAG</div></div>
+            </div>
+
+            <div className="rounded-3xl border-t-4 border-x border-b border-amber-300 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between"><div><h2 className="font-black">Arquitetura AI</h2><p className="mt-1 text-sm text-slate-500">Memória primeiro → RAG → LLM somente quando necessário.</p></div><div className="rounded-xl bg-slate-100 p-3"><Bot size={18}/></div></div>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">{[['01','Memory','Teste conhecido não consome token.'],['02','RAG','Busca local nos documentos.'],['03','Gateway','Escolhe o provedor configurado.'],['04','Auditável','Fonte e chunks retornados.']].map(([n,t,d])=><div key={n} className="rounded-2xl border border-slate-100 p-4"><div className="text-xs font-black text-slate-300">{n}</div><div className="mt-2 font-bold">{t}</div><p className="mt-1 text-xs leading-5 text-slate-500">{d}</p></div>)}</div>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
-            <div className="flex items-center justify-between"><div><h2 className="font-black">Arquitetura AI</h2><p className="mt-1 text-sm text-slate-500">Memória primeiro → RAG → LLM somente quando necessário.</p></div><div className="rounded-xl bg-slate-100 p-3"><Bot size={18}/></div></div>
-            <div className="mt-5 grid gap-3 md:grid-cols-4">{[['01','Memory','Teste conhecido não consome token.'],['02','RAG','Busca local nos documentos.'],['03','Gateway','Escolhe o provedor configurado.'],['04','Auditável','Fonte e chunks retornados.']].map(([n,t,d])=><div key={n} className="rounded-2xl border border-slate-100 p-4"><div className="text-xs font-black text-slate-300">{n}</div><div className="mt-2 font-bold">{t}</div><p className="mt-1 text-xs leading-5 text-slate-500">{d}</p></div>)}</div>
-          </div>
         </section>
         )}
       </main>
+
+      {copilotOpen && (
+        <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/40 p-5" onClick={() => setCopilotOpen(false)}>
+          <div className="w-full max-w-2xl rounded-3xl border-t-4 border-blue-300 bg-slate-950 p-6 text-white shadow-2xl md:p-8" onClick={e => e.stopPropagation()}>
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-slate-400"><Sparkles size={14}/> Oficina Copilot</div>
+                <h2 className="text-2xl font-black">Pergunte sobre clientes, veículos, OS e documentos.</h2>
+              </div>
+              <button onClick={() => setCopilotOpen(false)} className="rounded-xl p-2 text-slate-400 hover:bg-white/10"><X size={18}/></button>
+            </div>
+            <div className="rounded-2xl bg-white/10 p-2 ring-1 ring-white/10">
+              <textarea value={question} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}}} placeholder="Ex.: quais serviços aparecem no manual enviado?" className="min-h-28 w-full resize-none bg-transparent p-3 text-sm outline-none placeholder:text-slate-500"/>
+              <div className="flex justify-end"><button onClick={ask} disabled={busy} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">{busy?'Consultando...':'Consultar IA'}</button></div>
+            </div>
+            {answer && <div className="mt-4 rounded-2xl bg-white p-5 text-sm text-slate-800"><div className="mb-2 flex gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><Activity size={14}/> {answer.source} · {answer.provider || 'local'} · {answer.chunks_used ?? 0} chunks</div><p className="whitespace-pre-wrap">{answer.answer}</p></div>}
+          </div>
+        </div>
+      )}
+
+      {searchOpen && (
+        <div className="fixed inset-0 z-30 grid place-items-start bg-slate-950/40 p-4 pt-20" onClick={() => setSearchOpen(false)}>
+          <div className="mx-auto w-full max-w-md self-start rounded-2xl border-t-4 border-slate-300 bg-white p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[.2em] text-slate-400">Busca rápida</div>
+                <h2 className="text-lg font-black">Encontrar cliente</h2>
+              </div>
+              <button onClick={() => setSearchOpen(false)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button>
+            </div>
+            <form onSubmit={handleGlobalSearch} className="flex gap-2">
+              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Nome, telefone ou documento..." className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-slate-400"/>
+              <button disabled={searchBusy} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{searchBusy ? 'Buscando...' : 'Buscar'}</button>
+            </form>
+            <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+              {searchResults.map(customer => (
+                <button key={customer.id} onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); setPage('customers') }} className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-left hover:bg-slate-50">
+                  <span><span className="block font-bold text-slate-800">{customer.name}</span><span className="text-xs text-slate-500">{customer.phone || 'Sem telefone'} · {customer.vehicle_count} veículo(s)</span></span>
+                  <ChevronRight size={16} className="text-slate-400"/>
+                </button>
+              ))}
+              {searchQuery.trim() && !searchBusy && searchResults.length === 0 && <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Nenhum cliente encontrado.</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

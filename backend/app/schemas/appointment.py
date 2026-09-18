@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.models.appointment import AppointmentStatus
 
@@ -48,5 +48,4 @@ class AppointmentResponse(BaseModel):
     customer_name: str = ""
     vehicle_plate: str = ""
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

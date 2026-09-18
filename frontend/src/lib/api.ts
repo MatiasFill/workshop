@@ -167,6 +167,16 @@ export async function cancelAppointment(id: number): Promise<Appointment> {
   return handle(r)
 }
 
+export async function updateAppointmentStatus(
+  id: number, status: Exclude<AppointmentStatus, 'CANCELLED'>
+): Promise<Appointment> {
+  const r = await fetch(`${API}/appointments/${id}`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+  })
+  return handle(r)
+}
+
 // ------------------------------------------------------------- Estoque
 
 export type StockItem = {
@@ -226,6 +236,17 @@ export type WorkOrderItem = {
   total_price: number
 }
 
+export type ChecklistItemStatus = 'NOT_CHECKED' | 'OK' | 'ATTENTION'
+
+export type ChecklistItem = {
+  id: number
+  description: string
+  status: ChecklistItemStatus
+  notes: string
+  checked_by_user_id: number | null
+  checked_at: string | null
+}
+
 export type WorkOrder = {
   id: number
   company_id: number
@@ -246,6 +267,7 @@ export type WorkOrder = {
   customer_name: string
   vehicle_plate: string
   items: WorkOrderItem[]
+  checklist_items: ChecklistItem[]
 }
 
 export async function listWorkOrders(params?: { status?: WorkOrderStatus }): Promise<WorkOrder[]> {
@@ -268,6 +290,14 @@ export async function createWorkOrder(payload: {
   return handle(r)
 }
 
+export async function updateWorkOrderStatus(id: number, status: Exclude<WorkOrderStatus, 'DONE' | 'CANCELLED'>): Promise<WorkOrder> {
+  const r = await fetch(`${API}/work-orders/${id}`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+  })
+  return handle(r)
+}
+
 export async function closeWorkOrder(id: number): Promise<WorkOrder> {
   const r = await fetch(`${API}/work-orders/${id}/close`, { method: 'POST', credentials: 'include' })
   return handle(r)
@@ -275,6 +305,31 @@ export async function closeWorkOrder(id: number): Promise<WorkOrder> {
 
 export async function cancelWorkOrder(id: number): Promise<WorkOrder> {
   const r = await fetch(`${API}/work-orders/${id}/cancel`, { method: 'POST', credentials: 'include' })
+  return handle(r)
+}
+
+export async function addChecklistItem(workOrderId: number, description: string): Promise<WorkOrder> {
+  const r = await fetch(`${API}/work-orders/${workOrderId}/checklist`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description })
+  })
+  return handle(r)
+}
+
+export async function updateChecklistItem(
+  workOrderId: number, itemId: number, payload: { status?: ChecklistItemStatus; notes?: string }
+): Promise<WorkOrder> {
+  const r = await fetch(`${API}/work-orders/${workOrderId}/checklist/${itemId}`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  })
+  return handle(r)
+}
+
+export async function removeChecklistItem(workOrderId: number, itemId: number): Promise<WorkOrder> {
+  const r = await fetch(`${API}/work-orders/${workOrderId}/checklist/${itemId}`, {
+    method: 'DELETE', credentials: 'include'
+  })
   return handle(r)
 }
 

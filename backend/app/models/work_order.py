@@ -1,5 +1,6 @@
 import enum
 from datetime import date, datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -54,10 +55,13 @@ class WorkOrder(Base):
     next_revision_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     revision_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     items: Mapped[list["WorkOrderItem"]] = relationship(back_populates="work_order", cascade="all, delete-orphan")
+    checklist_items: Mapped[list["WorkOrderChecklistItem"]] = relationship(
+        back_populates="work_order", cascade="all, delete-orphan", order_by="WorkOrderChecklistItem.id"
+    )
 
 
 class WorkOrderItem(Base):
@@ -76,3 +80,33 @@ class WorkOrderItem(Base):
     unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
 
     work_order: Mapped["WorkOrder"] = relationship(back_populates="items")
+
+
+class ChecklistItemStatus(str, enum.Enum):
+    NOT_CHECKED = "NOT_CHECKED"
+    OK = "OK"
+    ATTENTION = "ATTENTION"
+
+
+class WorkOrderChecklistItem(Base):
+    """Item de checklist de inspeção veicular dentro de uma OS (ex.: freios,
+    pneus, óleo, fluidos). Fica separado de WorkOrderItem porque não tem
+    preço/quantidade — é só um veredito (OK/ATENÇÃO/não verificado) mais uma
+    observação livre, para o cliente conferir o que foi inspecionado."""
+
+    __tablename__ = "work_order_checklist_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id", ondelete="CASCADE"), index=True)
+
+    description: Mapped[str] = mapped_column(String(255))
+    status: Mapped[ChecklistItemStatus] = mapped_column(
+        Enum(ChecklistItemStatus, native_enum=False, length=15), default=ChecklistItemStatus.NOT_CHECKED
+    )
+    notes: Mapped[str] = mapped_column(String(500), default="")
+    checked_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
+
+    work_order: Mapped["WorkOrder"] = relationship(back_populates="checklist_items")

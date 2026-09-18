@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import smtplib
 from datetime import date, datetime, timedelta
+from app.core.clock import utcnow_naive
 from email.mime.text import MIMEText
 
 import httpx
@@ -106,7 +107,7 @@ def _next_backoff(attempts: int) -> datetime:
     """Backoff exponencial em minutos (1, 2, 4, 8, 16...), com teto de 60min
     para não deixar o worker esperando horas entre tentativas."""
     minutes = min(60, 2**attempts)
-    return datetime.utcnow() + timedelta(minutes=minutes)
+    return utcnow_naive() + timedelta(minutes=minutes)
 
 
 def _enqueue_retry(
@@ -168,7 +169,7 @@ def process_notification_queue(db: Session, company_id: int, limit: int = 50) ->
     check_upcoming_revisions): pensado para ser chamado por um cron/worker
     externo, ou manualmente via POST /api/notifications/process-queue.
     """
-    now = datetime.utcnow()
+    now = utcnow_naive()
     due = (
         db.query(NotificationRequest)
         .filter(
@@ -234,7 +235,7 @@ def notify_work_order_receipt(db: Session, work_order: WorkOrder) -> list[Notifi
     items_total = sum(float(i.quantity) * float(i.unit_price) for i in items)
     total = float(work_order.labor_value) + items_total - float(work_order.discount_value)
 
-    service_date = (work_order.closed_at or datetime.utcnow()).strftime("%d/%m/%Y")
+    service_date = (work_order.closed_at or utcnow_naive()).strftime("%d/%m/%Y")
     next_revision = (
         work_order.next_revision_date.strftime("%d/%m/%Y") if work_order.next_revision_date else "não definida"
     )
@@ -350,7 +351,7 @@ def check_upcoming_revisions(db: Session, company_id: int, days_ahead: int | Non
                 subject="", message=message, last_error=wa_detail,
             )
 
-        wo.revision_reminder_sent_at = datetime.utcnow()
+        wo.revision_reminder_sent_at = utcnow_naive()
         db.commit()
 
     return logs

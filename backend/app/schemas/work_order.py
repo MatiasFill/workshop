@@ -1,8 +1,8 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
-from app.models.work_order import WorkOrderItemKind, WorkOrderStatus
+from app.models.work_order import ChecklistItemStatus, WorkOrderItemKind, WorkOrderStatus
 
 
 class WorkOrderItemCreate(BaseModel):
@@ -49,8 +49,27 @@ class WorkOrderItemResponse(BaseModel):
     unit_price: float
     total_price: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChecklistItemCreate(BaseModel):
+    description: str = Field(min_length=1, max_length=255)
+
+
+class ChecklistItemUpdate(BaseModel):
+    status: ChecklistItemStatus | None = None
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class ChecklistItemResponse(BaseModel):
+    id: int
+    description: str
+    status: ChecklistItemStatus
+    notes: str
+    checked_by_user_id: int | None
+    checked_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkOrderResponse(BaseModel):
@@ -76,6 +95,6 @@ class WorkOrderResponse(BaseModel):
     customer_name: str = ""
     vehicle_plate: str = ""
     items: list[WorkOrderItemResponse] = Field(default_factory=list)
+    checklist_items: list[ChecklistItemResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

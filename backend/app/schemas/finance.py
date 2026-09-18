@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.models.finance import FinanceEntryStatus, FinanceEntryType
 
@@ -48,5 +48,4 @@ class FinanceEntryResponse(BaseModel):
     work_order_id: int | None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

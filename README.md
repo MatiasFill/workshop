@@ -447,6 +447,48 @@ OS" não precisa mais saber que isso envia um e-mail; só publica o fato.
 Para reagir a um evento novo no futuro (ex.: `customer.anonymized`, `finance_entry.paid`), basta
 escrever o handler e registrar em `register_handlers()` — a rota que publica o evento não muda.
 
+## FASE 13 — Checklist de inspeção veicular
+
+Item pendente do P1 (orçamento/OS/checklist) desde a especificação original.
+
+`WorkOrderChecklistItem` (migration `0011`, com RLS): item de checklist dentro de uma OS —
+descrição livre, status (`NOT_CHECKED`/`OK`/`ATTENTION`), observação, quem marcou e quando. Sem
+preço nem quantidade — é só um veredito de inspeção, separado de `WorkOrderItem` (que é peça/serviço
+cobrado).
+
+Rotas novas, todas reaproveitando a permissão `work_orders.update` já existente (sem permissão nova
+no RBAC): `POST/PATCH/DELETE /api/work-orders/{id}/checklist(/{item_id})`. `checklist_items` vem
+junto na resposta de `GET /api/work-orders/{id}`. Mesma regra de "OS encerrada" das demais edições
+de OS: `DONE`/`CANCELLED` bloqueia adicionar e remover item (editar status/observação de item já
+existente também fica bloqueado no frontend, que usa o mesmo status da OS para decidir).
+
+Frontend: botão "Checklist" em cada linha da tabela de Ordens de Serviço, abre um modal com a lista
+de itens, botões de status e campo de observação — some o botão de adicionar quando a OS está
+encerrada.
+
+Testes em `backend/tests/test_checklist.py`: adicionar/listar, atualizar status e observação,
+remover, 404 para item inexistente, bloqueio em OS encerrada, RECEPTION sem permissão, isolamento
+por empresa (RLS).
+
+## FASE 14 — Kanban com cards arrastáveis (Ordens de Serviço + Agenda)
+
+Sem tabela nova, sem migration, sem rota nova no backend — as duas telas passaram a usar as rotas
+`PATCH` que já existiam (`/work-orders/{id}` e `/appointments/{id}`, essa última já reavalia
+conflito de horário) para mudar o status ao soltar o card numa coluna diferente.
+
+Drag-and-drop nativo do HTML5 (`draggable`, `onDragStart`/`onDragOver`/`onDrop`), sem biblioteca
+nova — este ambiente não tinha acesso à internet para `npm install` no momento da implementação.
+
+- **Ordens de serviço**: colunas Aberta → Em andamento → Aguardando aprovação → Aprovada →
+  Concluída → Cancelada. Soltar em "Concluída" chama `POST /close` (checa estoque); soltar em
+  "Cancelada" chama `POST /cancel`; as demais colunas fazem `PATCH {status}`. Card mostra cliente,
+  placa, total e o botão de Checklist da FASE 13.
+- **Agenda**: colunas Agendado → Confirmado → Em andamento → Concluído → Cancelado → Não
+  compareceu. Soltar em "Cancelado" chama `POST /cancel`; as demais fazem `PATCH {status}` (o
+  backend reavalia conflito de horário/mecânico automaticamente).
+- Cards de itens já encerrados (`DONE`/`CANCELLED`/`NO_SHOW`) não são arrastáveis. Coluna sob o
+  cursor fica destacada durante o arraste.
+
 ## Modo memória
 
 Para testes, deixe:
@@ -570,12 +612,12 @@ oficina-ai/
 
 1. ~~Auth/sessões/RBAC + multiempresa real~~ (FASE 1, concluída)
 2. ~~Clientes/veículos~~ (FASE 2, concluída)
-3. ~~Agenda~~ (FASE 3, concluída) — falta orçamento/OS/checklist
-4. Orçamento/OS/checklist
-5. Estoque/transações/concorrência
-6. Financeiro/caixa
-7. Notificações/fila/WhatsApp/e-mail
-8. Auditoria/LGPD/exportação
-9. Observabilidade/backup/hardening
-10. pgvector + embeddings
-11. suíte E2E e CI/CD
+3. ~~Agenda~~ (FASE 3, concluída)
+4. ~~Orçamento/OS/checklist~~ (FASE 4/5 orçamento/OS; FASE 13 checklist — concluído)
+5. ~~Estoque/transações/concorrência~~ (FASE 4/5, concluída)
+6. ~~Financeiro/caixa~~ (FASE 6, concluída)
+7. ~~Notificações/fila/WhatsApp/e-mail~~ (FASE 4/5 envio; FASE 11 fila/retry, concluídas)
+8. ~~Auditoria/LGPD/exportação~~ (FASE 8/9/10, concluídas)
+9. Observabilidade/backup/hardening — em aberto, ver `docs/ROADMAP.md` (P4)
+10. pgvector + embeddings — em aberto, ver `docs/ROADMAP.md` (P5)
+11. suíte E2E e CI/CD — em aberto

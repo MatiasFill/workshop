@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -12,10 +13,14 @@ from app.models.stock import StockItem, StockMovement, StockMovementType
 from app.models.work_order import (
     CLOSED_STATUSES,
     WorkOrder,
+    WorkOrderChecklistItem,
     WorkOrderItem,
     WorkOrderStatus,
 )
 from app.schemas.work_order import (
+    ChecklistItemCreate,
+    ChecklistItemResponse,
+    ChecklistItemUpdate,
     WorkOrderCreate,
     WorkOrderItemAdd,
     WorkOrderItemResponse,
@@ -42,6 +47,12 @@ def _to_response(db: Session, wo: WorkOrder) -> WorkOrderResponse:
     customer = db.query(Customer).filter(Customer.id == wo.customer_id).first()
     vehicle = db.query(Vehicle).filter(Vehicle.id == wo.vehicle_id).first() if wo.vehicle_id else None
     items = db.query(WorkOrderItem).filter(WorkOrderItem.work_order_id == wo.id).all()
+    checklist_items = (
+        db.query(WorkOrderChecklistItem)
+        .filter(WorkOrderChecklistItem.work_order_id == wo.id)
+        .order_by(WorkOrderChecklistItem.id)
+        .all()
+    )
 
     return WorkOrderResponse(
         id=wo.id,
@@ -74,6 +85,7 @@ def _to_response(db: Session, wo: WorkOrder) -> WorkOrderResponse:
             )
             for i in items
         ],
+        checklist_items=[ChecklistItemResponse.model_validate(c) for c in checklist_items],
     )
 
 
@@ -262,6 +274,88 @@ def remove_work_order_item(
     return _to_response(db, wo)
 
 
+@work_order_router.post(
+    "/work-orders/{work_order_id}/checklist", response_model=WorkOrderResponse, status_code=201
+)
+def add_checklist_item(
+    work_order_id: int,
+    payload: ChecklistItemCreate,
+    user: SessionData = Depends(require_permission("work_orders.update")),
+    db: Session = Depends(get_tenant_db),
+):
+    wo = _get_work_order_or_404(db, user.company_id, work_order_id)
+    if wo.status in CLOSED_STATUSES:
+        raise HTTPException(422, "Ordem de serviço já encerrada não pode receber novos itens de checklist.")
+
+    item = WorkOrderChecklistItem(
+        company_id=user.company_id,
+        work_order_id=wo.id,
+        description=payload.description.strip(),
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(wo)
+    return _to_response(db, wo)
+
+
+@work_order_router.patch(
+    "/work-orders/{work_order_id}/checklist/{item_id}", response_model=WorkOrderResponse
+)
+def update_checklist_item(
+    work_order_id: int,
+    item_id: int,
+    payload: ChecklistItemUpdate,
+    user: SessionData = Depends(require_permission("work_orders.update")),
+    db: Session = Depends(get_tenant_db),
+):
+    wo = _get_work_order_or_404(db, user.company_id, work_order_id)
+    item = (
+        db.query(WorkOrderChecklistItem)
+        .filter(WorkOrderChecklistItem.id == item_id, WorkOrderChecklistItem.work_order_id == work_order_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(404, "Item de checklist não encontrado nesta ordem de serviço.")
+
+    if payload.status is not None:
+        item.status = payload.status
+        item.checked_by_user_id = user.user_id
+        item.checked_at = utcnow_naive()
+    if payload.notes is not None:
+        item.notes = payload.notes.strip()
+
+    db.commit()
+    db.refresh(wo)
+    return _to_response(db, wo)
+
+
+@work_order_router.delete(
+    "/work-orders/{work_order_id}/checklist/{item_id}", response_model=WorkOrderResponse
+)
+def remove_checklist_item(
+    work_order_id: int,
+    item_id: int,
+    user: SessionData = Depends(require_permission("work_orders.update")),
+    db: Session = Depends(get_tenant_db),
+):
+    wo = _get_work_order_or_404(db, user.company_id, work_order_id)
+    if wo.status in CLOSED_STATUSES:
+        raise HTTPException(422, "Ordem de serviço já encerrada não pode ter itens de checklist removidos.")
+
+    item = (
+        db.query(WorkOrderChecklistItem)
+        .filter(WorkOrderChecklistItem.id == item_id, WorkOrderChecklistItem.work_order_id == work_order_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(404, "Item de checklist não encontrado nesta ordem de serviço.")
+
+    db.delete(item)
+    db.commit()
+    db.refresh(wo)
+    return _to_response(db, wo)
+
+
 @work_order_router.post("/work-orders/{work_order_id}/close", response_model=WorkOrderResponse)
 def close_work_order(
     work_order_id: int,
@@ -302,7 +396,7 @@ def close_work_order(
         )
 
     wo.status = WorkOrderStatus.DONE
-    wo.closed_at = datetime.utcnow()
+    wo.closed_at = utcnow_naive()
     db.commit()
     db.refresh(wo)
 
@@ -351,7 +445,7 @@ def cancel_work_order(
         raise HTTPException(422, "Ordem de serviço já está encerrada.")
 
     wo.status = WorkOrderStatus.CANCELLED
-    wo.closed_at = datetime.utcnow()
+    wo.closed_at = utcnow_naive()
     db.commit()
     db.refresh(wo)
     log_action(

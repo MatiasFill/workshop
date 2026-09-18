@@ -1,5 +1,6 @@
 import hashlib
 from datetime import datetime, timedelta
+from app.core.clock import utcnow_naive
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.models.memory import MemoryEntry
@@ -18,7 +19,7 @@ def lookup(db: Session, company_id: int, question: str, context: str = ""):
     ))
     if not item:
         return None
-    if datetime.utcnow() - item.created_at > timedelta(seconds=settings.MEMORY_TTL_SECONDS):
+    if utcnow_naive() - item.created_at > timedelta(seconds=settings.MEMORY_TTL_SECONDS):
         return None
     return item
 

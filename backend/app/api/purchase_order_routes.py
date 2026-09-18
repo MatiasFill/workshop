@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from app.core.clock import utcnow_naive
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -134,7 +135,7 @@ def create_purchase_order(
         notes=payload.notes.strip(),
         payment_due_date=payload.payment_due_date,
         status=PurchaseOrderStatus.ORDERED,
-        ordered_at=datetime.utcnow(),
+        ordered_at=utcnow_naive(),
     )
     db.add(po)
     db.flush()
@@ -214,7 +215,7 @@ def receive_purchase_order(
         )
 
     po.status = PurchaseOrderStatus.RECEIVED
-    po.received_at = datetime.utcnow()
+    po.received_at = utcnow_naive()
     db.commit()
     db.refresh(po)
 

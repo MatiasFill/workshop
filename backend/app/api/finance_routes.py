@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from app.core.clock import utcnow_naive
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -210,7 +211,7 @@ def pay_finance_entry(
     entry.paid_amount = float(entry.paid_amount) + amount
     if entry.paid_amount >= float(entry.amount) - 0.01:
         entry.status = FinanceEntryStatus.PAID
-        entry.paid_at = datetime.utcnow()
+        entry.paid_at = utcnow_naive()
 
     if payload.register_cash_movement:
         session = _get_open_cash_session(db, user.company_id)

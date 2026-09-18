@@ -6,7 +6,10 @@ from .memory import MemoryEntry
 from .customer import Customer, Vehicle
 from .appointment import Appointment, AppointmentStatus
 from .stock import StockItem, StockMovement, StockMovementType
-from .work_order import WorkOrder, WorkOrderItem, WorkOrderStatus, WorkOrderItemKind
+from .work_order import (
+    WorkOrder, WorkOrderItem, WorkOrderStatus, WorkOrderItemKind,
+    WorkOrderChecklistItem, ChecklistItemStatus,
+)
 from .notification import NotificationLog, NotificationChannel, NotificationType, NotificationStatus
 from .notification_queue import NotificationRequest, NotificationRequestStatus
 from .finance import (

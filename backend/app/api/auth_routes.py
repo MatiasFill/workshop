@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -35,12 +35,7 @@ def _load_permissions(db: Session, user: User) -> list[str]:
     dependencies=[Depends(rate_limit("auth_login", 10, 60))],
 )
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    user = db.scalar(
-        select(User).where(
-            func.lower(User.email) == payload.email,
-            User.is_active.is_(True),
-        )
-    )
+    user = db.scalar(select(User).where(User.email == payload.email, User.is_active.is_(True)))
     # Mensagem de erro genérica de propósito (não revela se o e-mail existe),
     # para dificultar enumeração de contas — o mesmo texto serve para os dois
     # casos (usuário não encontrado / senha errada).

@@ -1,6 +1,7 @@
 from sqlalchemy import ForeignKey, String, Text, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
+from app.core.clock import utcnow_naive
 from app.db.session import Base
 
 class Document(Base):
@@ -10,7 +11,7 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(255))
     mime_type: Mapped[str] = mapped_column(String(100), default="")
     content: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 class Chunk(Base):
     __tablename__ = "chunks"
@@ -21,4 +22,4 @@ class Chunk(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
     content: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)

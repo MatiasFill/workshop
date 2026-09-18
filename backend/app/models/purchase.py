@@ -1,5 +1,6 @@
 import enum
 from datetime import date, datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -20,7 +21,7 @@ class Supplier(Base):
     notes: Mapped[str] = mapped_column(String(1000), default="")
 
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class PurchaseOrderStatus(str, enum.Enum):
@@ -50,7 +51,7 @@ class PurchaseOrder(Base):
     # app/api/purchase_order_routes.py -> receive_purchase_order.
     payment_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
     ordered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

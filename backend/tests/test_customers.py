@@ -49,14 +49,14 @@ def test_receptionist_can_create_customer_with_vehicle():
         "/api/customers",
         json={
             "name": "Maria Souza",
-            "document": "529.982.247-25",
+            "document": "123.456.789-00",
             "phone": "21999990000",
             "vehicles": [{"plate": "abc-1234", "brand": "Fiat", "model": "Uno"}],
         },
     )
     assert r.status_code == 201
     body = r.json()
-    assert body["document"] == "52998224725"  # normalizado, só dígitos
+    assert body["document"] == "12345678900"  # normalizado, só dígitos
     assert body["vehicles"][0]["plate"] == "ABC1234"  # normalizada, maiúscula sem hífen
 
 
@@ -103,10 +103,10 @@ def test_duplicate_document_in_same_company_is_rejected():
         db.close()
 
     c = _login("gerenteC@teste.local", "senha-correta-123")
-    r1 = c.post("/api/customers", json={"name": "Cliente 1", "document": "529.982.247-25"})
+    r1 = c.post("/api/customers", json={"name": "Cliente 1", "document": "111.222.333-44"})
     assert r1.status_code == 201
 
-    r2 = c.post("/api/customers", json={"name": "Cliente 2", "document": "52998224725"})
+    r2 = c.post("/api/customers", json={"name": "Cliente 2", "document": "111222333-44"})
     assert r2.status_code == 409
 
 

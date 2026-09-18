@@ -12,6 +12,7 @@ não anula; o próprio art. 16 da LGPD permite manter dados pessoais além do
 pedido de eliminação quando necessário para cumprimento de obrigação legal.
 """
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy.orm import Session
 
@@ -97,7 +98,7 @@ def export_customer_data(db: Session, company_id: int, customer_id: int) -> dict
             {"channel": n.channel.value, "type": n.type.value, "status": n.status.value, "created_at": n.created_at}
             for n in notifications
         ],
-        "exported_at": datetime.utcnow(),
+        "exported_at": utcnow_naive(),
     }
 
 
@@ -118,7 +119,7 @@ def anonymize_customer(db: Session, company_id: int, customer_id: int) -> Custom
     customer.notes = ""
     customer.is_active = False
     customer.is_anonymized = True
-    customer.anonymized_at = datetime.utcnow()
+    customer.anonymized_at = utcnow_naive()
 
     db.commit()
     db.refresh(customer)

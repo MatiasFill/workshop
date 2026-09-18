@@ -1,16 +1,14 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from app.core.validators import validate_email
+# Nota: usamos "str" em vez de "EmailStr" de propósito, para não adicionar a
+# dependência "email-validator" ao projeto só por causa deste campo. A
+# validação de formato de e-mail de verdade acontece no cadastro do usuário
+# (fora do escopo da FASE 1); aqui só validamos presença e tamanho.
 
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=255)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_login_email(cls, value: str) -> str:
-        return validate_email(value, None)
 
 
 class MeResponse(BaseModel):

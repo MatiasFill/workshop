@@ -1,5 +1,6 @@
 import enum
 from datetime import date, datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -60,7 +61,7 @@ class FinanceEntry(Base):
         ForeignKey("work_orders.id", ondelete="SET NULL"), nullable=True
     )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class CashSession(Base):
@@ -78,7 +79,7 @@ class CashSession(Base):
         Enum(CashSessionStatus, native_enum=False, length=10), default=CashSessionStatus.OPEN
     )
     opening_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
-    opened_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    opened_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
     opened_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Preenchidos só no fechamento. `closing_amount_counted` é o que a pessoa
@@ -113,6 +114,6 @@ class CashMovement(Base):
     description: Mapped[str] = mapped_column(String(255), default="")
 
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
     cash_session: Mapped["CashSession"] = relationship(back_populates="movements")

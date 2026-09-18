@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,7 +35,7 @@ class StockItem(Base):
     notes: Mapped[str] = mapped_column(String(1000), default="")
 
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
     movements: Mapped[list["StockMovement"]] = relationship(back_populates="stock_item", cascade="all, delete-orphan")
 
@@ -55,6 +56,6 @@ class StockMovement(Base):
     quantity: Mapped[int] = mapped_column(Integer)  # sempre positivo; `type` indica a direção
     reason: Mapped[str] = mapped_column(String(255), default="")
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
     stock_item: Mapped["StockItem"] = relationship(back_populates="movements")

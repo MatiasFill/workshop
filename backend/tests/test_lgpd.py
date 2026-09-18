@@ -79,7 +79,7 @@ def test_anonymize_customer_scrubs_pii_but_keeps_business_records():
     c = _login("gerenteLGPD2@teste.local", "senha-correta-123")
     customer = c.post(
         "/api/customers",
-        json={"name": "João Esquecimento", "email": "joao@example.com", "phone": "11988887777", "document": "52998224725"},
+        json={"name": "João Esquecimento", "email": "joao@example.com", "phone": "11988887777", "document": "12345678900"},
     ).json()
     wo = c.post("/api/work-orders", json={"customer_id": customer["id"], "labor_value": 150}).json()
 

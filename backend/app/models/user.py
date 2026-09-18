@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,7 +26,7 @@ class User(Base):
     password_salt: Mapped[str] = mapped_column(String(64))
 
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
     roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 

@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -41,4 +42,4 @@ class NotificationLog(Base):
     status: Mapped[NotificationStatus] = mapped_column(Enum(NotificationStatus, native_enum=False, length=10))
     detail: Mapped[str] = mapped_column(String(500), default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)

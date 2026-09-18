@@ -1,6 +1,7 @@
 from sqlalchemy import ForeignKey, String, Text, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
+from app.core.clock import utcnow_naive
 from app.db.session import Base
 
 class MemoryEntry(Base):
@@ -15,4 +16,4 @@ class MemoryEntry(Base):
     question: Mapped[str] = mapped_column(Text)
     context_hash: Mapped[str] = mapped_column(String(64), index=True, default="")
     answer: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)

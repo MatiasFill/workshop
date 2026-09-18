@@ -14,7 +14,7 @@
 - [x] sessão segura (FASE 1)
 - [x] clientes/veículos (FASE 2)
 - [x] agenda (FASE 3)
-- [x] orçamento/OS/checklist (FASE 4/5 — ver Ordens de Serviço abaixo)
+- [x] orçamento/OS/checklist (FASE 4/5 orçamento/OS; FASE 13 checklist de inspeção veicular)
 
 ## P2 — Operação
 - [x] estoque transacional (FASE 4/5: StockItem + StockMovement, baixa automática ao fechar OS)
@@ -38,11 +38,10 @@
 - [ ] monitoramento
 - [ ] backup/restore
 
-## Próximos passos sugeridos (pós FASE 12)
+## Próximos passos sugeridos (pós FASE 14)
 - Agendador real (cron/worker) para `check_upcoming_revisions`,
   `POST /retention/purge-notifications`, `POST /retention/anonymize-inactive`
   e `POST /notifications/process-queue` — todos hoje disparados manualmente.
-- Página de checklist de inspeção veicular dentro da Ordem de Serviço.
 - Monitoramento e backup/restore seguem em aberto no P4; todo o P5 (IA
   avançada) segue não iniciado.
 - Todo o P3 (Comunicação) está concluído — próximos handlers de evento

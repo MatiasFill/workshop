@@ -1,13 +1,10 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
-from app.core.validators import (
-    validate_document,
-    validate_email,
-    validate_phone,
-    validate_plate,
-)
+
+def _only_digits(value: str) -> str:
+    return "".join(ch for ch in value if ch.isdigit())
 
 
 class VehicleCreate(BaseModel):
@@ -22,7 +19,7 @@ class VehicleCreate(BaseModel):
     @field_validator("plate")
     @classmethod
     def normalize_plate(cls, v: str) -> str:
-        return validate_plate(v, None)
+        return v.strip().upper().replace("-", "").replace(" ", "")
 
 
 class VehicleUpdate(BaseModel):
@@ -40,7 +37,7 @@ class VehicleUpdate(BaseModel):
     def normalize_plate(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        return validate_plate(v, None)
+        return v.strip().upper().replace("-", "").replace(" ", "")
 
 
 class VehicleResponse(BaseModel):
@@ -56,8 +53,7 @@ class VehicleResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerCreate(BaseModel):
@@ -72,17 +68,7 @@ class CustomerCreate(BaseModel):
     @field_validator("document")
     @classmethod
     def normalize_document(cls, v: str) -> str:
-        return validate_document(v, None)
-
-    @field_validator("phone")
-    @classmethod
-    def normalize_phone(cls, v: str) -> str:
-        return validate_phone(v, None)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str) -> str:
-        return validate_email(v, None)
+        return _only_digits(v)
 
 
 class CustomerUpdate(BaseModel):
@@ -99,21 +85,7 @@ class CustomerUpdate(BaseModel):
     def normalize_document(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        return validate_document(v, None)
-
-    @field_validator("phone")
-    @classmethod
-    def normalize_phone(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        return validate_phone(v, None)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        return validate_email(v, None)
+        return _only_digits(v)
 
 
 class CustomerResponse(BaseModel):
@@ -129,8 +101,7 @@ class CustomerResponse(BaseModel):
     created_at: datetime
     vehicles: list[VehicleResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerListItem(BaseModel):
@@ -146,5 +117,4 @@ class CustomerListItem(BaseModel):
     vehicle_count: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

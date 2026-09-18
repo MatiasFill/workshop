@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -134,7 +135,7 @@ def close_cash_session(
     session.closing_amount_expected = expected
     session.closing_amount_counted = payload.closing_amount_counted
     session.status = CashSessionStatus.CLOSED
-    session.closed_at = datetime.utcnow()
+    session.closed_at = utcnow_naive()
     session.closed_by_user_id = user.user_id
     if payload.notes.strip():
         session.notes = (session.notes + " | " if session.notes else "") + payload.notes.strip()

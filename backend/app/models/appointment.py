@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,7 +47,7 @@ class Appointment(Base):
     service_type: Mapped[str] = mapped_column(String(255), default="")
     notes: Mapped[str] = mapped_column(String(1000), default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
     customer: Mapped["Customer"] = relationship()  # noqa: F821 — import cíclico evitado via string
     vehicle: Mapped["Vehicle | None"] = relationship()  # noqa: F821

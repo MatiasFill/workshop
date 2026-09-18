@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.models.purchase import PurchaseOrderStatus
 
@@ -32,8 +32,7 @@ class PurchaseOrderItemResponse(BaseModel):
     unit_cost: float
     total_cost: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderResponse(BaseModel):
@@ -49,5 +48,4 @@ class PurchaseOrderResponse(BaseModel):
     received_at: datetime | None
     items: list[PurchaseOrderItemResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from app.core.clock import utcnow_naive
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -55,10 +56,10 @@ class NotificationRequest(Base):
 
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5)
-    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
     last_error: Mapped[str] = mapped_column(String(500), default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow_naive, onupdate=utcnow_naive
     )

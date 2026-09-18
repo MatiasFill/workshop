@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.models.finance import CashMovementType, CashSessionStatus
 
@@ -32,8 +32,7 @@ class CashMovementResponse(BaseModel):
     finance_entry_id: int | None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CashSessionResponse(BaseModel):
@@ -48,5 +47,4 @@ class CashSessionResponse(BaseModel):
     notes: str
     current_balance: float  # opening_amount + movimentos até agora (só relevante enquanto OPEN)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
